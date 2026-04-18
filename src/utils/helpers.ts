@@ -4,7 +4,7 @@ import { Coordinates } from '../models/types';
 /**
  * Normalize coordinates to specified precision for cache keys
  */
-export const normalizeCoordinates = (coords: Coordinates): Coordinates => {
+const normalizeCoordinates = (coords: Coordinates): Coordinates => {
   const precision = config.cache.coordinatesPrecision;
   return {
     lat: Number(coords.lat.toFixed(precision)),

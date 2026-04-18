@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
+import { CorsOptions } from 'cors';
 import { logger, logRequest } from '../utils/logger';
 import { ApiResponse } from '../models/types';
+import { config } from '../config';
 
 /**
  * Request logging middleware
@@ -30,10 +32,24 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
+  const bodyParserError = error as Error & { status?: number; statusCode?: number; type?: string };
+
+  if (bodyParserError.type === 'entity.too.large' || bodyParserError.status === 413) {
+    res.status(413).json({
+      success: false,
+      error: {
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'Request body too large',
+      },
+    } as ApiResponse);
+    return;
+  }
+
   logger.error('Unhandled error', error, {
     method: req.method,
     path: req.path,
-    body: req.body,
+    contentLength: req.get('content-length'),
+    contentType: req.get('content-type'),
   });
 
   res.status(500).json({
@@ -61,9 +77,9 @@ export const notFoundHandler = (req: Request, res: Response): void => {
 /**
  * CORS options
  */
-export const corsOptions = {
-  origin: process.env.CORS_ORIGIN || '*',
+export const corsOptions: CorsOptions = {
+  origin: config.cors.origin,
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  credentials: config.cors.origin !== '*',
 };

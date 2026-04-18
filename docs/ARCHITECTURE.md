@@ -37,13 +37,13 @@ The WOW Sunset backend is a Node.js/TypeScript application that predicts sunset 
 ┌─────────────────────────────────────────────────────────────┐
 │                   Service Layer                             │
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │  Geocoding  │  │   Weather    │  │     Scoring      │  │
+│  │  Location   │  │   Weather    │  │     Scoring      │  │
 │  │   Service   │  │   Service    │  │     Service      │  │
 │  │             │  │              │  │                  │  │
-│  │  • Forward  │  │  • Forecast  │  │  • Cloud score   │  │
-│  │  • Reverse  │  │  • Historical│  │  • Visibility    │  │
-│  │  • Auto-    │  │  • AQI data  │  │  • Aerosols      │  │
-│  │    complete │  │              │  │  • Humidity      │  │
+│  │  • Reverse  │  │  • Forecast  │  │  • Cloud score   │  │
+│  │  • Timezone │  │  • Historical│  │  • Visibility    │  │
+│  │  • Cache    │  │  • AQI data  │  │  • Aerosols      │  │
+│  │    lookup   │  │              │  │  • Humidity      │  │
 │  └─────────────┘  └──────────────┘  │  • Pressure      │  │
 │                                      │  • Dynamics      │  │
 │                                      └──────────────────┘  │
@@ -52,9 +52,9 @@ The WOW Sunset backend is a Node.js/TypeScript application that predicts sunset 
            ▼                  ▼                    ▼
     ┌──────────────┐   ┌──────────────┐    ┌──────────────┐
    │ Open-Meteo   │   │ Open-Meteo   │    │    Redis     │
-   │  Geocoding   │   │   Weather    │    │    Cache     │
-    │     API      │   │     API      │    │              │
-    └──────────────┘   └──────────────┘    │  • Geo cache │
+   │  Location +  │   │   Weather    │    │    Cache     │
+    │ Timezone API │   │     API      │    │              │
+    └──────────────┘   └──────────────┘    │  • Location  │
                                             │  • Weather   │
                                             │  • Locks     │
                                             └──────────────┘
@@ -67,10 +67,10 @@ The WOW Sunset backend is a Node.js/TypeScript application that predicts sunset 
 ### 1. **Service Layer**
 
 #### Open-Meteo Service (`open-meteo.service.ts`)
-- **Purpose**: Forecast, archive, air-quality, and reverse geocoding access
-- **Provider**: Open-Meteo Geocoding API
+- **Purpose**: Forecast, archive, air-quality, and location metadata access
+- **Provider**: Open-Meteo APIs
 - **Features**:
-  - Reverse geocoding (coordinates → address)
+   - Reverse location metadata (coordinates → normalized location + timezone)
   - Timezone estimation
   - Result caching (7-day TTL)
 
@@ -145,7 +145,6 @@ confidence = baseConfidence + bonuses(dataCompleteness)
 **Cache Types:**
 | Type | TTL | Purpose |
 |------|-----|---------|
-| `geocoding` | 7 days | Generic geocoding cache bucket |
 | `reverse-geocoding` | 7 days | Coordinates → location |
 | `forecast` | 6 hours | Weather + sunset scores |
 | `historical` | 30 days | Past weather data |

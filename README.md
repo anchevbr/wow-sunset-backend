@@ -14,11 +14,14 @@ Backend API for sunset quality forecasting and historical analysis.
 ## Current API Surface
 
 - `GET /api/health`
-- `GET /api/health/cache`
 - `POST /api/location/reverse`
 - `POST /api/sunset/forecast`
 - `POST /api/sunset/historical`
 - `POST /api/sunset/historical/best`
+
+Optional internal endpoint:
+
+- `GET /api/health/cache` when `ENABLE_CACHE_STATS_ENDPOINT=true`
 
 The backend is coordinate-first. Text search, autocomplete, and address-based forecast endpoints were intentionally removed so frontend clients can own location search UX.
 
@@ -52,9 +55,21 @@ PORT=3000
 CORS_ORIGIN=https://your-frontend.example
 REDIS_HOST=localhost
 REDIS_PORT=6379
-REDIS_PASSWORD=
+REDIS_PASSWORD=change-me
 REDIS_DB=0
+REDIS_TLS_ENABLED=false
+REDIS_TLS_REJECT_UNAUTHORIZED=true
+REDIS_PRIVATE_NETWORK=true
+JSON_BODY_LIMIT=16kb
+URL_ENCODED_BODY_LIMIT=16kb
+ENABLE_CACHE_STATS_ENDPOINT=false
 ```
+
+Production Redis policy:
+
+- `REDIS_PASSWORD` is required in production.
+- Use `REDIS_TLS_ENABLED=true` for Redis over non-private networks.
+- If Redis stays on a trusted private network, set `REDIS_PRIVATE_NETWORK=true`.
 
 ## Run
 
@@ -73,6 +88,8 @@ npm start
 - Forecast responses include historical year-to-date scores.
 - Best historical responses are backed by a persistent incremental cache that only fetches missing new days.
 - Repeated forecast requests can be served directly from Redis.
+- `GET /api/health` is a public liveness check and does not expose cache internals.
+- Request bodies are capped by default at `16kb`; oversized payloads return HTTP `413`.
 
 ## Basic Example
 
@@ -92,4 +109,6 @@ curl -X POST http://localhost:3000/api/sunset/forecast \
 
 - Do not leave `CORS_ORIGIN=*` in production.
 - Make sure Redis is reachable from the deployed app.
+- Production requires authenticated Redis plus either TLS or an explicitly private Redis network.
+- The cache stats endpoint is disabled by default and should only be enabled for trusted internal environments.
 - Build before start, or configure your platform to run `npm run build` during deploy.

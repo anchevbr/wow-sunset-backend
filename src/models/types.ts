@@ -128,7 +128,6 @@ export interface ApiError {
 }
 
 export type CacheKeyType = 
-  | 'geocoding'
   | 'reverse-geocoding'
   | 'forecast'
   | 'historical'
@@ -153,6 +152,8 @@ export interface ServiceResult<T> {
 // Open-Meteo API Models
 // ============================================================================
 
+export type OpenMeteoTimeValue = number | string;
+
 export interface OpenMeteoWeatherResponse {
   latitude: number;
   longitude: number;
@@ -160,7 +161,7 @@ export interface OpenMeteoWeatherResponse {
   timezone: string;
   timezone_abbreviation: string;
   hourly: {
-    time: string[];
+    time: OpenMeteoTimeValue[];
     temperature_2m: number[];
     relative_humidity_2m: number[];
     dew_point_2m?: number[];
@@ -170,7 +171,7 @@ export interface OpenMeteoWeatherResponse {
     cloud_cover_low: number[];
     cloud_cover_mid: number[];
     cloud_cover_high: number[];
-    visibility: Array<number | null>;
+    visibility?: Array<number | null>;
     vapour_pressure_deficit?: number[];
     pressure_msl: number[];
     wind_speed_10m: number[];
@@ -195,7 +196,7 @@ export interface OpenMeteoAirQualityResponse {
   longitude: number;
   timezone: string;
   hourly: {
-    time: string[];
+    time: OpenMeteoTimeValue[];
     pm10?: number[];
     pm2_5?: number[];
     us_aqi?: number[];

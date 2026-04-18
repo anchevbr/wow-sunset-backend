@@ -7,14 +7,11 @@ import { ApiResponse } from '../../models/types';
  * GET /api/health
  */
 export const healthCheck = async (_req: Request, res: Response): Promise<void> => {
-  const cacheStats = await cacheService.getStats();
-
   res.json({
     success: true,
     data: {
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      cache: cacheStats,
     },
   } as ApiResponse);
 };

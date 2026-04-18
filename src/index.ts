@@ -1,4 +1,5 @@
 import express, { Express } from 'express';
+import { Server } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -15,6 +16,8 @@ import {
 
 class App {
   public app: Express;
+  private server: Server | null = null;
+  private isShuttingDown = false;
 
   constructor() {
     this.app = express();
@@ -45,8 +48,14 @@ class App {
     this.app.use('/api/', limiter);
 
     // Body parsing
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: true }));
+    this.app.use(express.json({ limit: config.request.jsonBodyLimit }));
+    this.app.use(
+      express.urlencoded({
+        extended: true,
+        limit: config.request.urlEncodedBodyLimit,
+        parameterLimit: 20,
+      })
+    );
 
     // Request logging
     this.app.use(requestLogger);
@@ -58,22 +67,38 @@ class App {
 
     // Root endpoint
     this.app.get('/', (_req, res) => {
+      const endpoints: {
+        health: string;
+        cacheStats?: string;
+        location: {
+          reverse: string;
+        };
+        sunset: {
+          forecast: string;
+          historical: string;
+          bestHistorical: string;
+        };
+      } = {
+        health: 'GET /api/health',
+        location: {
+          reverse: 'POST /api/location/reverse',
+        },
+        sunset: {
+          forecast: 'POST /api/sunset/forecast',
+          historical: 'POST /api/sunset/historical',
+          bestHistorical: 'POST /api/sunset/historical/best',
+        },
+      };
+
+      if (config.health.enableCacheStatsEndpoint) {
+        endpoints.cacheStats = 'GET /api/health/cache';
+      }
+
       res.json({
         name: 'WOW Sunset API',
         version: '1.0.0',
         description: 'Sunset quality forecasting and historical analysis',
-        endpoints: {
-          health: 'GET /api/health',
-          cacheStats: 'GET /api/health/cache',
-          location: {
-            reverse: 'POST /api/location/reverse',
-          },
-          sunset: {
-            forecast: 'POST /api/sunset/forecast',
-            historical: 'POST /api/sunset/historical',
-            bestHistorical: 'POST /api/sunset/historical/best',
-          },
-        },
+        endpoints,
       });
     });
   }
@@ -88,13 +113,17 @@ class App {
 
   public async start(): Promise<void> {
     try {
+      if (this.server) {
+        return;
+      }
+
       // Connect to Redis
       logger.info('Connecting to Redis...');
       await cacheService.connect();
 
       // Start server
       const port = config.server.port;
-      this.app.listen(port, () => {
+      this.server = this.app.listen(port, () => {
         logger.info(`🌅 WOW Sunset API server started`);
         logger.info(`📍 Environment: ${config.server.env}`);
         logger.info(`🚀 Server listening on port ${port}`);
@@ -107,9 +136,43 @@ class App {
   }
 
   public async shutdown(): Promise<void> {
+    if (this.isShuttingDown) {
+      return;
+    }
+
+    this.isShuttingDown = true;
     logger.info('Shutting down server...');
-    await cacheService.disconnect();
+
+    try {
+      await Promise.all([
+        this.closeServer(),
+        cacheService.disconnect(),
+      ]);
+    } finally {
+      this.isShuttingDown = false;
+    }
+
     logger.info('Server shutdown complete');
+  }
+
+  private async closeServer(): Promise<void> {
+    if (!this.server) {
+      return;
+    }
+
+    const activeServer = this.server;
+    this.server = null;
+
+    await new Promise<void>((resolve, reject) => {
+      activeServer.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
   }
 }
 
@@ -117,17 +180,22 @@ class App {
 const application = new App();
 
 // Graceful shutdown handlers
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM signal received');
-  await application.shutdown();
-  process.exit(0);
-});
+const registerShutdownHandler = (signal: NodeJS.Signals): void => {
+  process.once(signal, async () => {
+    logger.info(`${signal} signal received`);
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT signal received');
-  await application.shutdown();
-  process.exit(0);
-});
+    try {
+      await application.shutdown();
+      process.exit(0);
+    } catch (error) {
+      logger.error('Shutdown failed', error as Error, { signal });
+      process.exit(1);
+    }
+  });
+};
+
+registerShutdownHandler('SIGTERM');
+registerShutdownHandler('SIGINT');
 
 // Start the server
 if (require.main === module) {

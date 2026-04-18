@@ -132,9 +132,15 @@ export const getHistorical = async (req: Request, res: Response): Promise<void> 
     }
 
     // Get historical weather data
-    const weatherResult = await openMeteoService.getHistorical(coords, targetDate);
+    const weatherResult = await openMeteoService.getHistorical(
+      coords,
+      targetDate,
+      locationResult.data.timezone
+    );
     if (!weatherResult.success || !weatherResult.data) {
-      res.status(500).json({
+      const statusCode = weatherResult.error?.code === 'NO_DATA' ? 404 : 500;
+
+      res.status(statusCode).json({
         success: false,
         error: weatherResult.error || {
           code: 'HISTORICAL_ERROR',

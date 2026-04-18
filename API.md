@@ -104,7 +104,7 @@ Request body:
 Notes:
 
 - All returned timestamps are formatted in the request location's local timezone.
-- `forecasts` contains scored forecast entries.
+- `forecasts` contains one scored sunset entry per forecast day.
 - `historical` contains year-to-date scored days.
 
 Example response excerpt:
@@ -121,7 +121,7 @@ Example response excerpt:
       {
         "score": 72,
         "date": "2026-04-11T00:00:00+03:00",
-        "sunsetTime": "2026-04-10T19:58:31+03:00",
+        "sunsetTime": "2026-04-11T19:58:31+03:00",
         "confidence": 0.83,
         "factors": {
           "cloudCoverage": {
@@ -159,6 +159,7 @@ Request body:
 Rules:
 
 - `date` must be `YYYY-MM-DD`.
+- `date` must be a valid calendar date.
 - Future dates are rejected.
 
 Example response excerpt:
@@ -267,6 +268,7 @@ For a shorter request/response cheat sheet, see `API_CALLS.md`.
 | `VALIDATION_ERROR` | Invalid request body or parameter values |
 | `LOCATION_NOT_FOUND` | Reverse geocoding could not resolve the location |
 | `FORECAST_ERROR` | Forecast data could not be produced |
+| `NO_DATA` | No historical weather data was available for the requested day |
 | `HISTORICAL_ERROR` | Historical weather data could not be produced |
 | `BEST_HISTORICAL_ERROR` | Best historical days could not be produced |
 | `RATE_LIMIT_EXCEEDED` | Too many requests in the current rate-limit window |

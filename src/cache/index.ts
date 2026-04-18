@@ -18,11 +18,19 @@ class CacheService {
 
     this.connectionPromise = (async () => {
       try {
+        const socketOptions = {
+          host: config.redis.host,
+          port: config.redis.port,
+          ...(config.redis.tlsEnabled
+            ? {
+                tls: true,
+                rejectUnauthorized: config.redis.tlsRejectUnauthorized,
+              }
+            : {}),
+        };
+
         this.client = createClient({
-          socket: {
-            host: config.redis.host,
-            port: config.redis.port,
-          },
+          socket: socketOptions,
           password: config.redis.password || undefined,
           database: config.redis.db,
         });
@@ -89,7 +97,6 @@ class CacheService {
    */
   private getTTL(type: CacheKeyType): number {
     switch (type) {
-      case 'geocoding':
       case 'reverse-geocoding':
         return config.cache.ttl.geocoding;
       case 'forecast':
@@ -258,19 +265,35 @@ class CacheService {
     }
 
     try {
-      const keys = await this.client!.keys('sunset:*');
-      const info = await this.client!.info('memory');
+      const [keyCount, info] = await Promise.all([
+        this.countKeys('sunset:*'),
+        this.client!.info('memory'),
+      ]);
       const memoryMatch = info.match(/used_memory_human:(.+)/);
       
       return {
         connected: true,
-        keyCount: keys.length,
+        keyCount,
         memoryUsed: memoryMatch?.[1].trim(),
       };
     } catch (error) {
       logger.error('Cache stats error', error as Error);
       return { connected: this.isConnected, keyCount: 0 };
     }
+  }
+
+  private async countKeys(pattern: string): Promise<number> {
+    if (!this.client) {
+      return 0;
+    }
+
+    let count = 0;
+
+    for await (const _key of this.client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+      count += 1;
+    }
+
+    return count;
   }
 }
 

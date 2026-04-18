@@ -14,7 +14,11 @@ http://localhost:3000/api
 curl http://localhost:3000/api/health
 ```
 
-## Cache Stats
+Public health is intentionally minimal and does not include cache telemetry.
+
+## Optional Internal Cache Stats
+
+Enable with `ENABLE_CACHE_STATS_ENDPOINT=true` only in trusted environments.
 
 ```bash
 curl http://localhost:3000/api/health/cache
@@ -64,3 +68,4 @@ curl -X POST http://localhost:3000/api/sunset/historical/best \
 - Sunset timestamps come back in the location's local timezone.
 - Forecast responses may include `meta.cached: true` on repeated calls.
 - Best historical results use the persistent year-to-date cache.
+- Request bodies above the configured parser limit return HTTP `413`.

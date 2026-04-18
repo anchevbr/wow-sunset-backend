@@ -1,3 +1,4 @@
+import SunCalc from 'suncalc';
 import { logger } from '../utils/logger';
 import { cacheService } from '../cache';
 import openMeteoService from './open-meteo.service';
@@ -67,7 +68,10 @@ class SunsetService {
 
       try {
         // Step 3: Get weather forecast for next 5 days
-        const forecastResult = await openMeteoService.getForecast(location.normalizedCoordinates);
+        const forecastResult = await openMeteoService.getForecast(
+          location.normalizedCoordinates,
+          location.timezone
+        );
         if (!forecastResult.success || !forecastResult.data) {
           return {
             success: false,
@@ -80,7 +84,8 @@ class SunsetService {
         // Step 4: Calculate sunset scores for forecast
         const forecastScores = this.calculateForecastScores(
           location.normalizedCoordinates,
-          weatherForecasts
+          weatherForecasts,
+          location.timezone
         );
 
         // Step 5: Get historical data for current year
@@ -130,26 +135,76 @@ class SunsetService {
    */
   private calculateForecastScores(
     coords: Coordinates,
-    weatherConditions: WeatherConditions[]
+    weatherConditions: WeatherConditions[],
+    timeZone: string
   ): SunsetScore[] {
+    const dayIndexes = new Map<string, number[]>();
+
+    weatherConditions.forEach((condition, index) => {
+      const dayKey = getDateStringInTimezone(condition.timestamp, timeZone);
+      const indexes = dayIndexes.get(dayKey);
+
+      if (indexes) {
+        indexes.push(index);
+        return;
+      }
+
+      dayIndexes.set(dayKey, [index]);
+    });
+
     const scores: SunsetScore[] = [];
 
-    for (let i = 0; i < weatherConditions.length; i++) {
-      const currentConditions = weatherConditions[i];
-      const previousConditions = i > 0 ? weatherConditions[i - 1] : undefined;
+    for (const indexes of dayIndexes.values()) {
+      const selectedIndex = this.selectForecastIndexForDay(weatherConditions, indexes, coords);
+      const currentConditions = weatherConditions[selectedIndex];
+      const previousConditions = selectedIndex > 0 ? weatherConditions[selectedIndex - 1] : undefined;
 
       const score = scoringService.calculateScore(
         currentConditions,
         coords,
         currentConditions.timestamp,
         previousConditions,
-        previousConditions?.precipitation ?? 0
+        this.calculateRecentPrecipitation(weatherConditions, selectedIndex)
       );
 
       scores.push(score);
     }
 
-    return scores;
+    return scores.sort((left, right) => left.date.getTime() - right.date.getTime());
+  }
+
+  private selectForecastIndexForDay(
+    weatherConditions: WeatherConditions[],
+    dayIndexes: number[],
+    coords: Coordinates
+  ): number {
+    const referenceIndex = dayIndexes[Math.floor(dayIndexes.length / 2)];
+    const sunsetTimestamp = SunCalc.getTimes(
+      weatherConditions[referenceIndex].timestamp,
+      coords.lat,
+      coords.lng
+    ).sunset.getTime();
+
+    return dayIndexes.reduce((closestIndex, currentIndex) => {
+      const closestDiff = Math.abs(
+        weatherConditions[closestIndex].timestamp.getTime() - sunsetTimestamp
+      );
+      const currentDiff = Math.abs(
+        weatherConditions[currentIndex].timestamp.getTime() - sunsetTimestamp
+      );
+
+      return currentDiff < closestDiff ? currentIndex : closestIndex;
+    }, dayIndexes[0]);
+  }
+
+  private calculateRecentPrecipitation(
+    weatherConditions: WeatherConditions[],
+    selectedIndex: number,
+    lookbackEntries = 4
+  ): number {
+    return weatherConditions
+      .slice(Math.max(0, selectedIndex - lookbackEntries), selectedIndex)
+      .reduce((sum, condition) => sum + (condition.precipitation ?? 0), 0);
   }
 
   /**
@@ -181,25 +236,32 @@ class SunsetService {
       to: datesToFetch[datesToFetch.length - 1],
     });
 
-    for (const dateString of datesToFetch) {
-      try {
-        const result = await openMeteoService.getHistorical(coords, new Date(`${dateString}T12:00:00Z`));
-        
-        if (result.success && result.data) {
-          const score = scoringService.calculateScore(
-            result.data.selected,
-            coords,
-            result.data.selected.timestamp,
-            result.data.previous,
-            result.data.recentPrecipitation ?? 0
-          );
-          scores.push(score);
-        }
-      } catch (error) {
-        logger.debug('Historical data fetch failed', { date: dateString });
-        // Continue with other dates
-      }
+    const historicalRangeResult = await openMeteoService.getHistoricalRange(
+      coords,
+      datesToFetch[0],
+      datesToFetch[datesToFetch.length - 1],
+      timeZone
+    );
+
+    if (!historicalRangeResult.success || !historicalRangeResult.data) {
+      logger.warn('Historical range fetch failed', {
+        cacheKey,
+        code: historicalRangeResult.error?.code,
+      });
+      return scores;
     }
+
+    scores.push(
+      ...historicalRangeResult.data.map(({ snapshot }) =>
+        scoringService.calculateScore(
+          snapshot.selected,
+          coords,
+          snapshot.selected.timestamp,
+          snapshot.previous,
+          snapshot.recentPrecipitation ?? 0
+        )
+      )
+    );
 
     scores.sort((left, right) => left.date.getTime() - right.date.getTime());
 
