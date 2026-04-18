@@ -127,6 +127,12 @@ export interface ApiError {
   details?: unknown;
 }
 
+export interface RequestAccessContext {
+  type: 'internal' | 'public' | 'anonymous';
+  identifier: string;
+  rateLimitBypass: boolean;
+}
+
 export type CacheKeyType = 
   | 'reverse-geocoding'
   | 'forecast'

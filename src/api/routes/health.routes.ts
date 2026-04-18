@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as healthController from '../controllers/health.controller';
 import { config } from '../../config';
+import { requireInternalAccess } from '../../middleware';
 
 const router = Router();
 
@@ -15,7 +16,7 @@ router.get('/', healthController.healthCheck);
  * Cache statistics
  */
 if (config.health.enableCacheStatsEndpoint) {
-	router.get('/cache', healthController.cacheStats);
+  router.get('/cache', requireInternalAccess, healthController.cacheStats);
 }
 
 export default router;

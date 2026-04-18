@@ -2,6 +2,12 @@
 
 ## Base URL
 
+Production authentication model:
+
+- First-party app traffic should come from your own backend server or BFF with `X-Internal-App-Secret`.
+- Public/free API traffic should use `X-API-Key` or `Authorization: Bearer <key>`.
+- Anonymous API access is intended only for local development unless you explicitly choose otherwise.
+
 Forecast:
 
 ```bash
@@ -251,6 +257,14 @@ Example response excerpt:
 
 Validation failures return HTTP `400`.
 
+## Authentication Notes
+
+- `GET /api/health` stays public.
+- `GET /api/health/cache` is optional and, when enabled, requires first-party internal access.
+- First-party internal traffic bypasses the public rate limiter.
+- Public/free API traffic is rate limited by API key.
+- If anonymous access is enabled, fallback rate limiting uses request IP.
+
 ## Caching Notes
 
 - Forecast requests can return `meta.cached: true` on repeated calls.
@@ -266,11 +280,14 @@ For a shorter request/response cheat sheet, see `API_CALLS.md`.
 | Code | Meaning |
 |------|---------|
 | `VALIDATION_ERROR` | Invalid request body or parameter values |
+| `AUTH_REQUIRED` | A protected API endpoint requires an internal secret or public API key |
+| `INTERNAL_ACCESS_REQUIRED` | The endpoint is only available to the first-party application backend |
 | `LOCATION_NOT_FOUND` | Reverse geocoding could not resolve the location |
 | `FORECAST_ERROR` | Forecast data could not be produced |
 | `NO_DATA` | No historical weather data was available for the requested day |
 | `HISTORICAL_ERROR` | Historical weather data could not be produced |
 | `BEST_HISTORICAL_ERROR` | Best historical days could not be produced |
+| `PAYLOAD_TOO_LARGE` | The submitted request body exceeded the configured parser limit |
 | `RATE_LIMIT_EXCEEDED` | Too many requests in the current rate-limit window |
 | `INTERNAL_ERROR` | Unexpected server-side failure |
 
@@ -282,6 +299,7 @@ Forecast:
 
 ```bash
 curl -X POST http://localhost:3000/api/sunset/forecast \
+  -H "X-Internal-App-Secret: $INTERNAL_APP_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"lat":48.8566,"lng":2.3522}'
 ```
@@ -290,6 +308,7 @@ Historical day:
 
 ```bash
 curl -X POST http://localhost:3000/api/sunset/historical \
+  -H "X-API-Key: $PUBLIC_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"lat":48.8566,"lng":2.3522,"date":"2026-01-15"}'
 ```

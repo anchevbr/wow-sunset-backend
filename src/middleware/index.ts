@@ -4,6 +4,8 @@ import { logger, logRequest } from '../utils/logger';
 import { ApiResponse } from '../models/types';
 import { config } from '../config';
 
+export * from './access-control';
+
 /**
  * Request logging middleware
  */
@@ -17,6 +19,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction): 
       statusCode: res.statusCode,
       duration: `${duration}ms`,
       ip: req.ip,
+      accessType: req.accessContext?.type,
     });
   });
 
@@ -80,6 +83,6 @@ export const notFoundHandler = (req: Request, res: Response): void => {
 export const corsOptions: CorsOptions = {
   origin: config.cors.origin,
   methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Internal-App-Secret'],
   credentials: config.cors.origin !== '*',
 };

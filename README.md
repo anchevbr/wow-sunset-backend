@@ -52,7 +52,11 @@ Set production-safe values in `.env`, especially:
 ```env
 NODE_ENV=production
 PORT=3000
+TRUST_PROXY=true
 CORS_ORIGIN=https://your-frontend.example
+INTERNAL_APP_SECRET=change-me
+PUBLIC_API_KEYS=free-key-1,free-key-2
+ALLOW_ANONYMOUS_API=false
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=change-me
@@ -70,6 +74,13 @@ Production Redis policy:
 - `REDIS_PASSWORD` is required in production.
 - Use `REDIS_TLS_ENABLED=true` for Redis over non-private networks.
 - If Redis stays on a trusted private network, set `REDIS_PRIVATE_NETWORK=true`.
+
+API access model:
+
+- Your own app should call this backend from a trusted app server or BFF using `X-Internal-App-Secret`.
+- Trusted first-party server traffic bypasses the public rate limiter.
+- Future public/free API consumers should use `X-API-Key` or `Authorization: Bearer <key>` and remain rate limited.
+- Anonymous API access is allowed by default in development, but is blocked in production.
 
 ## Run
 
@@ -95,6 +106,7 @@ npm start
 
 ```bash
 curl -X POST http://localhost:3000/api/sunset/forecast \
+  -H "X-Internal-App-Secret: $INTERNAL_APP_SECRET" \
   -H "Content-Type: application/json" \
   -d '{"lat":37.9838,"lng":23.7275}'
 ```
@@ -109,6 +121,9 @@ curl -X POST http://localhost:3000/api/sunset/forecast \
 
 - Do not leave `CORS_ORIGIN=*` in production.
 - Make sure Redis is reachable from the deployed app.
+- Set `TRUST_PROXY=true` when running behind a load balancer or reverse proxy so IP-based fallback logic works correctly.
 - Production requires authenticated Redis plus either TLS or an explicitly private Redis network.
+- Production also requires `INTERNAL_APP_SECRET`; do not call the protected API directly from the browser if you want first-party traffic to bypass public limits.
+- Public/free clients should be issued API keys instead of relying on anonymous IP-based access.
 - The cache stats endpoint is disabled by default and should only be enabled for trusted internal environments.
 - Build before start, or configure your platform to run `npm run build` during deploy.

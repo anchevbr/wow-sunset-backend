@@ -8,7 +8,11 @@ import { logger } from './utils/logger';
 import { cacheService } from './cache';
 import routes from './api/routes';
 import {
+  attachRequestAccessContext,
+  apiAccessGuard,
   requestLogger,
+  rateLimitKeyGenerator,
+  rateLimitSkip,
   errorHandler,
   notFoundHandler,
   corsOptions,
@@ -21,6 +25,7 @@ class App {
 
   constructor() {
     this.app = express();
+    this.app.set('trust proxy', config.server.trustProxy);
     this.initializeMiddleware();
     this.initializeRoutes();
     this.initializeErrorHandling();
@@ -30,11 +35,17 @@ class App {
     // Security middleware
     this.app.use(helmet());
     this.app.use(cors(corsOptions));
+    this.app.use(attachRequestAccessContext);
+
+    // Request logging
+    this.app.use(requestLogger);
 
     // Rate limiting
     const limiter = rateLimit({
       windowMs: config.rateLimit.windowMs,
       max: config.rateLimit.max,
+      skip: rateLimitSkip,
+      keyGenerator: rateLimitKeyGenerator,
       message: {
         success: false,
         error: {
@@ -46,6 +57,7 @@ class App {
       legacyHeaders: false,
     });
     this.app.use('/api/', limiter);
+    this.app.use('/api', apiAccessGuard);
 
     // Body parsing
     this.app.use(express.json({ limit: config.request.jsonBodyLimit }));
@@ -57,8 +69,6 @@ class App {
       })
     );
 
-    // Request logging
-    this.app.use(requestLogger);
   }
 
   private initializeRoutes(): void {

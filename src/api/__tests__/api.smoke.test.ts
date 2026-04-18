@@ -5,6 +5,13 @@ jest.mock('../../cache', () => ({
   },
 }));
 
+jest.mock('../../middleware/access-control', () => {
+  const actual = jest.requireActual('../../middleware/access-control');
+  return {
+    ...actual,
+  };
+});
+
 jest.mock('../../services/sunset.service', () => ({
   sunsetService: {
     getSunsetForecast: jest.fn(),

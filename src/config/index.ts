@@ -17,6 +17,12 @@ const parseBooleanFlag = (
   return value === 'true';
 };
 
+const parseCsvList = (value: string | undefined): string[] =>
+  value
+    ?.split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0) ?? [];
+
 const isPrivateIpv4Host = (host: string): boolean => {
   const match = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (!match) {
@@ -53,6 +59,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().transform(Number).default('3000'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
+  TRUST_PROXY: booleanFlagSchema,
 
   // Redis
   REDIS_HOST: z.string().default('localhost'),
@@ -73,6 +80,11 @@ const envSchema = z.object({
 
   // CORS
   CORS_ORIGIN: z.string().default('*'),
+
+  // API access
+  INTERNAL_APP_SECRET: z.string().optional(),
+  PUBLIC_API_KEYS: z.string().optional(),
+  ALLOW_ANONYMOUS_API: booleanFlagSchema,
 
   // Request limits
   JSON_BODY_LIMIT: z.string().default('16kb'),
@@ -116,6 +128,7 @@ export const config = {
     isDevelopment: env.NODE_ENV === 'development',
     isProduction: env.NODE_ENV === 'production',
     isTest: env.NODE_ENV === 'test',
+    trustProxy: parseBooleanFlag(env.TRUST_PROXY, env.NODE_ENV === 'production'),
   },
 
   redis: {
@@ -142,6 +155,12 @@ export const config = {
     origin: env.CORS_ORIGIN,
   },
 
+  auth: {
+    internalAppSecret: env.INTERNAL_APP_SECRET?.trim() || undefined,
+    publicApiKeys: parseCsvList(env.PUBLIC_API_KEYS),
+    allowAnonymousApi: parseBooleanFlag(env.ALLOW_ANONYMOUS_API, env.NODE_ENV !== 'production'),
+  },
+
   request: {
     jsonBodyLimit: env.JSON_BODY_LIMIT,
     urlEncodedBodyLimit: env.URL_ENCODED_BODY_LIMIT,
@@ -160,6 +179,18 @@ export const config = {
 const validateSecurityConfiguration = (): void => {
   if (!config.server.isProduction) {
     return;
+  }
+
+  if (!config.auth.internalAppSecret) {
+    console.error('❌ INTERNAL_APP_SECRET must be set in production.');
+    process.exit(1);
+  }
+
+  if (config.auth.allowAnonymousApi) {
+    console.error(
+      '❌ ALLOW_ANONYMOUS_API must be false in production. Use INTERNAL_APP_SECRET or PUBLIC_API_KEYS instead.'
+    );
+    process.exit(1);
   }
 
   if (!config.redis.password?.trim()) {
